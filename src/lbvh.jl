@@ -1,4 +1,5 @@
 include("aabb.jl")
+include("abstract_primitive.jl")
 include("morton_codes.jl")
 
 
@@ -23,6 +24,162 @@ end
 
 
 
+"""
+```julia
+function GetContainerAABB(aabbs::Vector{AABB{N}})::AABB{N} where {N}
+```
+
+Calculates a bounding AABB (Axis Aligned Bounding Box) around a vector of AABBs (basically takes the min of mins and max of maxes)
+
+# Arguments
+- `aabbs`: the vector of AABBs 
+
+# Returns
+- `AABB{N}`: an AABB which contains all of the `aabbs` (inclusive)
+
+# Examples
+```julia
+julia> GetContainerAABB(Vector{AABB2D}([AABB2D(SVector(4.0f0, 5.4f0), SVector(6.0f0, 5.6f0)), AABB2D(SVector(0.0f0, 5.0f0), SVector(10.01f0, 6.6f0)), AABB2D(SVector(-10.0f0, -5.0f0), SVector(10.0f0, 6.0f0))])) # => AABB2D(Float32[-10.0, -5.0], Float32[10.01, 6.6])
+julia> GetContainerAABB(Vector{AABB2D}([AABB2D(SVector(2.0f0, -2.0f0), SVector(2.0f0, -2.0f0)), AABB2D(SVector(2.0f0, -2.0f0), SVector(2.1f0, 3.1f0))])) == AABBUnion(AABB2D(SVector(2.0f0, -2.0f0), SVector(2.0f0, -2.0f0)), AABB2D(SVector(2.0f0, -2.0f0), SVector(2.1f0, 3.1f0))) # => true
+julia> GetContainerAABB(Vector{AABB3D}([AABB3D(SVector(0.7f0, 0.8f0, 1.8f0), SVector(0.7f0, 0.8f0, 1.8f0)), AABB3D(SVector(0.7f0, -0.8f0, 1.8f0), SVector(0.7f0, 1.8f0, 1.8f0)), AABB3D(SVector(0.0f0, 0.0f0, 0.0f0), SVector(1.0f0, 1.0f0, 2.0f0))])) # => AABB3D(Float32[0.0, -0.8, 0.0], Float32[1.0, 1.8, 2.0])
+```
+"""
+function GetContainerAABB(aabbs::Vector{AABB{N}})::AABB{N} where {N}
+    return AABB{N}(reduce((a, b) -> min.(a, b), getfield.(aabbs, :min)), reduce((a, b) -> max.(a, b), getfield.(aabbs, :max)))
+end
+
+"""
+```julia
+function GetScaledAABBCenter(aabb::AABB{N}, container_aabb::AABB{N})::SVector{N, Float32} where {N}
+```
+
+Computes the center of an AABB (Axis Aligned Bounding Box) and scales it by a containing AABB, thus if the center of the AABB lies inside the containing AABB than the returned vector will have values between 0.0 and 1.0 (both inclusive [0.0, 1.0])
+
+# Arguments
+- `aabb`: the AABB of which this function is taking the center and scaling
+- `container_aabb`: the AABB which hopefully contains the `aabb`
+
+# Returns
+- `SVector{N, Float32}`: the scaled vector where each value is the scaled (by the size of the `container_aabb` alongst the corresponding axis) and offset (by the corresponding min of `container_aabb`) value of the `aabb`'s center
+
+# Examples
+```julia
+julia> GetScaledAABBCenter(AABB2D(SVector(4.0f0, 5.4f0), SVector(6.0f0, 5.6f0)), AABB2D(SVector(0.0f0, 5.0f0), SVector(10.0f0, 6.0f0))) # => Float32[0.5, 0.5]
+julia> GetScaledAABBCenter(AABB2D(SVector(2.0f0, -2.0f0), SVector(2.0f0, -2.0f0)), AABB2D(SVector(2.0f0, -2.0f0), SVector(2.1f0, 3.1f0))) # => Float32[0.0, 0.0]
+julia> GetScaledAABBCenter(AABB2D(SVector(-32.0f0, 3.2f0), SVector(-12.0f0, 3.4f0)), AABB2D(SVector(-1.0f0, 0.0f0), SVector(1.1f0, 1.1f0))) # => Float32[-10.0, 3.0]
+julia> GetScaledAABBCenter(AABB3D(SVector(0.7f0, 0.8f0, 1.8f0), SVector(0.7f0, 0.8f0, 1.8f0)), AABB3D(SVector(0.0f0, 0.0f0, 0.0f0), SVector(1.0f0, 1.0f0, 2.0f0))) # => Float32[0.7, 0.8, 0.9]
+```
+
+# Notes
+- if the `aabb` isn't a point and the `container_aabb` is computed as the min of mins and max of maxes than this might be a tiny bit wasteful  
+"""
+function GetScaledAABBCenter(aabb::AABB{N}, container_aabb::AABB{N})::SVector{N, Float32} where {N}
+    return ((aabb.min .+ 0.5 .* (aabb.max .- aabb.min) .- container_aabb.min) ./ (container_aabb.max .- container_aabb.min))
+end
+
+"""
+```julia
+function MortonCodeScaledCenter32(scaled_center::SVector{2, Float32})::UInt32
+```
+
+Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 65535] (both inclusive, 65535 == ((2^16) - 1)) and then creates a 32 bit morton code out of them
+
+# Arguments
+- `scaled_center`: a 2D point which should have values in ranges of [0.0, 1.0] (both inclusive)
+
+# Returns
+- `UInt32`: the resulting morton code which is the combination of the quantized axis
+"""
+function MortonCodeScaledCenter32(scaled_center::SVector{2, Float32})::UInt32
+    return MortonCode2D32(UInt16(round(65535.0 * scaled_center[1])), UInt16(round(65535.0 * scaled_center[2])))
+end
+
+"""
+```julia
+function MortonCodeScaledCenter32(scaled_center::SVector{3, Float32})::UInt32
+```
+
+Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 1023] (both inclusive, 1023 == ((2^10) - 1)) and then creates a 32 (only 30 is used) bit morton code out of them
+
+# Arguments
+- `scaled_center`: a 3D point which should have values in ranges of [0.0, 1.0] (both inclusive)
+
+# Returns
+- `UInt32`: the resulting morton code which is the combination of the quantized axis, the 2 most significant bits are always 0
+"""
+function MortonCodeScaledCenter32(scaled_center::SVector{3, Float32})::UInt32
+    return MortonCode3D30(UInt16(round(1023.0 * scaled_center[1])), UInt16(round(1023.0 * scaled_center[2])), UInt16(round(1023.0 * scaled_center[3])))
+end
+
+"""
+```julia
+function MortonCodeScaledCenter64(scaled_center::SVector{2, Float32})::UInt64
+```
+
+Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 4294967295] (both inclusive, 4294967295 == ((2^32) - 1)) and then creates a 64 bit morton code out of them
+
+# Arguments
+- `scaled_center`: a 2D point which should have values in ranges of [0.0, 1.0] (both inclusive)
+
+# Returns
+- `UInt32`: the resulting morton code which is the combination of the quantized axis
+"""
+function MortonCodeScaledCenter64(scaled_center::SVector{2, Float32})::UInt64
+    return MortonCode2D64(UInt32(round(4294967295.0 * scaled_center[1])), UInt32(round(4294967295.0 * scaled_center[2])))
+end
+
+"""
+```julia
+function MortonCodeScaledCenter64(scaled_center::SVector{3, Float32})::UInt64
+```
+
+Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 2097151] (both inclusive, 2097151 == ((2^21) - 1)) and then creates a 64 (only 63 is used) bit morton code out of them
+
+# Arguments
+- `scaled_center`: a 3D point which should have values in ranges of [0.0, 1.0] (both inclusive)
+
+# Returns
+- `UInt32`: the resulting morton code which is the combination of the quantized axis, the top most bit is always 0
+"""
+function MortonCodeScaledCenter64(scaled_center::SVector{3, Float32})::UInt64
+    return MortonCode3D63(UInt32(round(2097151.0 * scaled_center[1])), UInt32(round(2097151.0 * scaled_center[2])), UInt32(round(2097151.0 * scaled_center[3])))
+end
+
+"""
+```julia
+function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+```
+
+Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bounding AABB that encapsulates all of the AABBs then using this bounding AABB scales the vector of AABBs before computing their morton codes
+
+# Arguments
+- `primitive_aabbs`: a vector of AABBs of the primitives
+
+# Returns
+- `Vector{UInt32}`: the resulting vector of 32 bit morton codes
+"""
+function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+    container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
+    return MortonCodeScaledCenter32.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
+end
+
+"""
+```julia
+function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+```
+
+Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bounding AABB that encapsulates all of the AABBs then using this bounding AABB scales the vector of AABBs before computing their morton codes
+
+# Arguments
+- `primitive_aabbs`: a vector of AABBs of the primitives
+
+# Returns
+- `Vector{UInt32}`: the resulting vector of 64 bit morton codes
+"""
+function CalculateMortonCodesForPrimitiveAABBs64(primitive_aabbs::Vector{AABB{N}})::Vector{UInt64} where {N}
+    container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
+    return MortonCodeScaledCenter64.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
+end
 
 """
 ```julia
@@ -162,32 +319,32 @@ end
 ```julia
 function InitLeafs(
     lbvh_nodes::Vector{LBVHNode{N}},
-    sorted_morton_codes_with_primitive_indecies::Vector{PrimitiveIndexWithMortonCode{MortonCodeT}},
-    primitive_aabbs::Vector{AABB{N}},
+    primitive_indecies::Vector{UInt32},
+    primitives::Vector{PrimitiveT},
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
-) where {N, MortonCodeT<:AbstractMortonCodeType}
+) where {N, PrimitiveT<:AbstractPrimitive}
 ```
 
 Initializes the leaf nodes with their primitive indexes and their AABBs (Axis Aligned Bounding Box)
 
 # Arguments
 - `lbvh_nodes`: the buffer (vector) containing the LBVH nodes (both the internal and leaf nodes)
-- `sorted_morton_codes_with_primitive_indecies`: a vector containing pairs of morton codes and the primitive indexes associated with them sorted by the morton codes
-- `primitive_aabbs`: a vector with the primitives AABBs in the original order (in which the primitives came)
+- `primitive_indecies`: a vector containing the primitive indecies associated with the sorted morton codes
+- `primitives`: a vector of the primitives
 - `number_of_internal_nodes`: the number of internal nodes inside `lbvh_nodes`
 - `number_of_leafs`: the number of leaf nodes inside `lbvh_nodes`
 """
 function InitLeafs(
     lbvh_nodes::Vector{LBVHNode{N}},
-    sorted_morton_codes_with_primitive_indecies::Vector{PrimitiveIndexWithMortonCode{MortonCodeT}},
-    primitive_aabbs::Vector{AABB{N}},
+    primitive_indecies::Vector{UInt32},
+    primitives::Vector{PrimitiveT},
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
-) where {N, MortonCodeT<:AbstractMortonCodeType}
+) where {N, PrimitiveT<:AbstractPrimitive}
     for i in 0:(number_of_leafs - 1)
-        primitive_index::UInt32 = sorted_morton_codes_with_primitive_indecies[i + 1].primitive_index
-        primitive_aabb::AABB{N} = primitive_aabbs[primitive_index + 1]
+        primitive_index::UInt32 = primitive_indecies[i + 1]
+        primitive_aabb::AABB{N} = GetAABB(primitives[primitive_index + 1])
         leaf_index::UInt32 = (number_of_internal_nodes + i)
         lbvh_nodes[leaf_index + 1] = LBVHNode{N}(INVALID_LEAF_CHILD_POINTER, INVALID_LEAF_CHILD_POINTER, primitive_index, primitive_aabb)
     end

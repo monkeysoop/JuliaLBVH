@@ -1,3 +1,7 @@
+include("abstract_primitive.jl")
+
+
+
 const AbstractMortonCodeType = Union{UInt32, UInt64}
 
 
