@@ -1,5 +1,4 @@
 include("aabb.jl")
-include("hierarchy.jl")
 include("lbvh.jl")
 include("line_segment.jl")
 include("morton_codes.jl")
@@ -97,8 +96,8 @@ for i in 0:(number_of_leafs - 1)
     current_node::LBVHNode2D = lbvh_nodes[current_node_index + 1]
 
     while (true)
-        left_child_node::LBVHNode2D = lbvh_nodes[current_node.left_child_index + 1] # because of theinvalid index being 0 these might be the root
-        right_child_node::LBVHNode2D = lbvh_nodes[current_node.right_child_index + 1] # because of theinvalid index being 0 these might be the root
+        left_child_node::LBVHNode2D = lbvh_nodes[current_node.left_child_index + 1] # because of the invalid index being 0 these might be the root
+        right_child_node::LBVHNode2D = lbvh_nodes[current_node.right_child_index + 1] # because of the invalid index being 0 these might be the root
 
         intersects_left_child::Bool = ((current_node.left_child_index != INVALID_LEAF_CHILD_POINTER) && AABB2AABBIntersection(leaf_node.aabb, left_child_node.aabb))
         intersects_right_child::Bool = ((current_node.right_child_index != INVALID_LEAF_CHILD_POINTER) && AABB2AABBIntersection(leaf_node.aabb, right_child_node.aabb))
