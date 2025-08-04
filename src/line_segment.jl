@@ -39,8 +39,8 @@ function Segment2SegmentIntersection2D(a::LineSegment2D, b::LineSegment2D)::Bool
 
     denom::Float32 = CrossProduct2D(va, vb)
 
-    s::Float32 = (va[1] * vba[2] - va[1] * vba[1]) / denom
-    t::Float32 = (vb[2] * vba[2] - vb[2] * vba[1]) / denom
+    s::Float32 = CrossProduct2D(va, vba) / denom
+    t::Float32 = CrossProduct2D(vb, vba) / denom
 
     #p::SVector{2, Float32} = a.p1 .+ t * va
 
