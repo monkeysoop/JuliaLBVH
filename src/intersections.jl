@@ -15,44 +15,44 @@ function FindIntersections(
         leaf_node::LBVHNode{N} = lbvh_nodes[leaf_index + 1]
 
         stack::MVector{100, UInt32} = MVector{100, UInt32}(undef)
-        stack_index::Int32 = 0
+        stack_size::Int32 = 0
 
         current_node_index::UInt32 = 0
         current_node::LBVHNode{N} = lbvh_nodes[current_node_index + 1]
 
         while (true)
-            left_child_node::LBVHNode{N} = lbvh_nodes[current_node.left_child_index + 1] # because of the invalid index being 0 these might be the root, so this will work
-            right_child_node::LBVHNode{N} = lbvh_nodes[current_node.right_child_index + 1] # because of the invalid index being 0 these might be the root, so this will work
+            is_node_internal::Bool = (current_node.left_child_index != INVALID_CHILD_POINTER)
 
-            intersects_left_child::Bool = ((current_node.left_child_index != INVALID_LEAF_CHILD_POINTER) && AABB2AABBIntersection(leaf_node.aabb, left_child_node.aabb))
-            intersects_right_child::Bool = ((current_node.right_child_index != INVALID_LEAF_CHILD_POINTER) && AABB2AABBIntersection(leaf_node.aabb, right_child_node.aabb))
-            
-            if (intersects_left_child)
-                if (intersects_right_child)
-                    if (stack_index < length(stack))
-                        stack[stack_index + 1] = current_node.right_child_index
+            intersect_left_child::Bool = (is_node_internal && AABB2AABBIntersection(leaf_node.aabb, lbvh_nodes[current_node.left_child_index + 1].aabb))
+            intersect_right_child::Bool = (is_node_internal && AABB2AABBIntersection(leaf_node.aabb, lbvh_nodes[current_node.right_child_index_or_primitive_index + 1].aabb))
+
+            if (intersect_left_child)
+                if (intersect_right_child)
+                    if (stack_size < length(stack))
+                        stack[stack_size + 1] = current_node.right_child_index_or_primitive_index
+                        stack_size += 1
                     else
                         println("Warning, dropped node because stack is too small")
                     end
                 end
-
                 current_node_index = current_node.left_child_index
-                current_node = left_child_node
-            elseif (intersects_right_child)
-                current_node_index = current_node.right_child_index
-                current_node = right_child_node
+                current_node = lbvh_nodes[current_node.left_child_index + 1]
+            elseif (intersect_right_child)
+                current_node_index = current_node.right_child_index_or_primitive_index
+                current_node = lbvh_nodes[current_node.right_child_index_or_primitive_index + 1]
             else
-                if (Intersection(primitives[current_node.primitive_index + 1], primitives[leaf_node.primitive_index + 1]))
-                    println("Intersection between, leaf: ", leaf_node.primitive_index, " current: ", current_node.primitive_index)
+                if (Intersection(primitives[current_node.right_child_index_or_primitive_index + 1], primitives[leaf_node.right_child_index_or_primitive_index + 1]))
+                    println("Intersection between, leaf: ", leaf_node.right_child_index_or_primitive_index, " current: ", current_node.right_child_index_or_primitive_index)
                 end
 
-                if (stack_index == -1)
+                if (stack_size == 0)
                     break
                 end
 
-                current_node_index = stack[stack_index + 1]
+                current_node_index = stack[(stack_size - 1) + 1]
+                stack_size -= 1
+
                 current_node = lbvh_nodes[current_node_index + 1]
-                stack_index -= 1
             end
         end
     end

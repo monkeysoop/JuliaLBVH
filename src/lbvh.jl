@@ -4,13 +4,11 @@ include("morton_codes.jl")
 
 
 
-const INVALID_LEAF_CHILD_POINTER::UInt32 = 0
-const INVALID_PRIMITIVE_INDEX::UInt32 = 0
+const INVALID_CHILD_POINTER::UInt32 = 0 # 0 is the root thus it can't be a child pointer
 
 mutable struct LBVHNode{N}
     left_child_index::UInt32
-    right_child_index::UInt32
-    primitive_index::UInt32 # only for leafs
+    right_child_index_or_primitive_index::UInt32 # if (left_child_index == INVALID_CHILD_POINTER) then this points to a primitive, otherwise this is points to the right child node
     aabb::AABB{N}
 end
 
@@ -346,7 +344,7 @@ function InitLeafs(
         primitive_index::UInt32 = primitive_indecies[i + 1]
         primitive_aabb::AABB{N} = GetAABB(primitives[primitive_index + 1])
         leaf_index::UInt32 = (number_of_internal_nodes + i)
-        lbvh_nodes[leaf_index + 1] = LBVHNode{N}(INVALID_LEAF_CHILD_POINTER, INVALID_LEAF_CHILD_POINTER, primitive_index, primitive_aabb)
+        lbvh_nodes[leaf_index + 1] = LBVHNode{N}(INVALID_CHILD_POINTER, primitive_index, primitive_aabb)
     end
 end
 
@@ -381,7 +379,7 @@ function BuildHierarchy(
         left_child_index::UInt32 = range_split + ((range_split == range_start) ? number_of_internal_nodes : 0)
         right_child_index::UInt32 = range_split + 1 + (((range_split + 1) == range_end) ? number_of_internal_nodes : 0)
 
-        lbvh_nodes[internal_node_index + 1] = LBVHNode{N}(left_child_index, right_child_index, INVALID_PRIMITIVE_INDEX, AABB2D(SVector(0.0f0, 0.0f0), SVector(0.0f0, 0.0f0)))
+        lbvh_nodes[internal_node_index + 1] = LBVHNode{N}(left_child_index, right_child_index, AABB2D(SVector(0.0f0, 0.0f0), SVector(0.0f0, 0.0f0)))
 
         parent_information[left_child_index + 1] = internal_node_index
         parent_information[right_child_index + 1] = internal_node_index
@@ -428,7 +426,7 @@ function CalculateBoundingBoxesBottomUp(
 
             current_node::LBVHNode{N} = lbvh_nodes[current_node_index + 1]
             left_child_node::LBVHNode{N} = lbvh_nodes[current_node.left_child_index + 1]
-            right_child_node::LBVHNode{N} = lbvh_nodes[current_node.right_child_index + 1]
+            right_child_node::LBVHNode{N} = lbvh_nodes[current_node.right_child_index_or_primitive_index + 1]
 
             current_node.aabb = AABBUnion(left_child_node.aabb, right_child_node.aabb)
 
