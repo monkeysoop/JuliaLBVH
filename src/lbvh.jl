@@ -43,6 +43,7 @@ julia> GetContainerAABB(Vector{AABB3D}([AABB3D(SVector(0.7f0, 0.8f0, 1.8f0), SVe
 ```
 """
 function GetContainerAABB(aabbs::Vector{AABB{N}})::AABB{N} where {N}
+    @assert all(AABBValid.(aabbs)) "Error, invalid AABBs provided"
     return AABB{N}(reduce((a, b) -> min.(a, b), getfield.(aabbs, :min)), reduce((a, b) -> max.(a, b), getfield.(aabbs, :max)))
 end
 
@@ -72,6 +73,8 @@ julia> GetScaledAABBCenter(AABB3D(SVector(0.7f0, 0.8f0, 1.8f0), SVector(0.7f0, 0
 - if the `aabb` isn't a point and the `container_aabb` is computed as the min of mins and max of maxes than this might be a tiny bit wasteful  
 """
 function GetScaledAABBCenter(aabb::AABB{N}, container_aabb::AABB{N})::SVector{N, Float32} where {N}
+    @assert AABBValid(aabb) "Error, invalid AABB provided"
+    @assert AABBValid(container_aabb) "Error, invalid container AABB provided"
     return ((aabb.min .+ 0.5 .* (aabb.max .- aabb.min) .- container_aabb.min) ./ (container_aabb.max .- container_aabb.min))
 end
 
@@ -80,7 +83,7 @@ end
 function MortonCodeScaledCenter32(scaled_center::SVector{2, Float32})::UInt32
 ```
 
-Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 65535] (both inclusive, 65535 == ((2^16) - 1)) and then creates a 32 bit morton code out of them
+Quantizes the values of a 2D point from ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 65535] (both inclusive, 65535 == ((2^16) - 1)) and then creates a 32 bit morton code out of them
 
 # Arguments
 - `scaled_center`: a 2D point which should have values in ranges of [0.0, 1.0] (both inclusive)
@@ -89,6 +92,7 @@ Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both c
 - `UInt32`: the resulting morton code which is the combination of the quantized axis
 """
 function MortonCodeScaledCenter32(scaled_center::SVector{2, Float32})::UInt32
+    @assert (all(scaled_center .>= 0.0) && all(scaled_center .<= 1.0)) "Error, invalid scaled center provided"
     return MortonCode2D32(UInt16(round(65535.0 * scaled_center[1])), UInt16(round(65535.0 * scaled_center[2])))
 end
 
@@ -97,7 +101,7 @@ end
 function MortonCodeScaledCenter32(scaled_center::SVector{3, Float32})::UInt32
 ```
 
-Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 1023] (both inclusive, 1023 == ((2^10) - 1)) and then creates a 32 (only 30 is used) bit morton code out of them
+Quantizes the values of a 3D point from ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 1023] (both inclusive, 1023 == ((2^10) - 1)) and then creates a 32 (only 30 is used) bit morton code out of them
 
 # Arguments
 - `scaled_center`: a 3D point which should have values in ranges of [0.0, 1.0] (both inclusive)
@@ -106,6 +110,7 @@ Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both c
 - `UInt32`: the resulting morton code which is the combination of the quantized axis, the 2 most significant bits are always 0
 """
 function MortonCodeScaledCenter32(scaled_center::SVector{3, Float32})::UInt32
+    @assert (all(scaled_center .>= 0.0) && all(scaled_center .<= 1.0)) "Error, invalid scaled center provided"
     return MortonCode3D30(UInt16(round(1023.0 * scaled_center[1])), UInt16(round(1023.0 * scaled_center[2])), UInt16(round(1023.0 * scaled_center[3])))
 end
 
@@ -114,7 +119,7 @@ end
 function MortonCodeScaledCenter64(scaled_center::SVector{2, Float32})::UInt64
 ```
 
-Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 4294967295] (both inclusive, 4294967295 == ((2^32) - 1)) and then creates a 64 bit morton code out of them
+Quantizes the values of a 2D point from ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 4294967295] (both inclusive, 4294967295 == ((2^32) - 1)) and then creates a 64 bit morton code out of them
 
 # Arguments
 - `scaled_center`: a 2D point which should have values in ranges of [0.0, 1.0] (both inclusive)
@@ -123,6 +128,7 @@ Quantizes the values of a 2D point from (hopefully) ranges of [0.0, 1.0] (both c
 - `UInt32`: the resulting morton code which is the combination of the quantized axis
 """
 function MortonCodeScaledCenter64(scaled_center::SVector{2, Float32})::UInt64
+    @assert (all(scaled_center .>= 0.0) && all(scaled_center .<= 1.0)) "Error, invalid scaled center provided"
     return MortonCode2D64(UInt32(round(4294967295.0 * scaled_center[1])), UInt32(round(4294967295.0 * scaled_center[2])))
 end
 
@@ -131,7 +137,7 @@ end
 function MortonCodeScaledCenter64(scaled_center::SVector{3, Float32})::UInt64
 ```
 
-Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 2097151] (both inclusive, 2097151 == ((2^21) - 1)) and then creates a 64 (only 63 is used) bit morton code out of them
+Quantizes the values of a 3D point from ranges of [0.0, 1.0] (both can be inclusive) into ranges [0, 2097151] (both inclusive, 2097151 == ((2^21) - 1)) and then creates a 64 (only 63 is used) bit morton code out of them
 
 # Arguments
 - `scaled_center`: a 3D point which should have values in ranges of [0.0, 1.0] (both inclusive)
@@ -140,6 +146,7 @@ Quantizes the values of a 3D point from (hopefully) ranges of [0.0, 1.0] (both c
 - `UInt32`: the resulting morton code which is the combination of the quantized axis, the top most bit is always 0
 """
 function MortonCodeScaledCenter64(scaled_center::SVector{3, Float32})::UInt64
+    @assert (all(scaled_center .>= 0.0) && all(scaled_center .<= 1.0)) "Error, invalid scaled center provided"
     return MortonCode3D63(UInt32(round(2097151.0 * scaled_center[1])), UInt32(round(2097151.0 * scaled_center[2])), UInt32(round(2097151.0 * scaled_center[3])))
 end
 
@@ -157,6 +164,7 @@ Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bound
 - `Vector{UInt32}`: the resulting vector of 32 bit morton codes
 """
 function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+    @assert all(AABBValid.(primitive_aabbs)) "Error, invalid AABBs provided"
     container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
     return MortonCodeScaledCenter32.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
 end
@@ -175,6 +183,7 @@ Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bound
 - `Vector{UInt32}`: the resulting vector of 64 bit morton codes
 """
 function CalculateMortonCodesForPrimitiveAABBs64(primitive_aabbs::Vector{AABB{N}})::Vector{UInt64} where {N}
+    @assert all(AABBValid.(primitive_aabbs)) "Error, invalid AABBs provided"
     container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
     return MortonCodeScaledCenter64.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
 end
@@ -340,6 +349,11 @@ function InitLeafs(
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
 ) where {N, PrimitiveT<:AbstractPrimitive}
+    @assert (number_of_leafs > 0) "Error, can't construct any empty lbvh"
+    @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
+    @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid lbvh buffer provided"
+    @assert (length(primitive_indecies) == number_of_leafs) "Error, invalid primitive indecies buffer provided"
+    @assert (length(primitives) == number_of_leafs) "Error, invalid primitives buffer provided"
     for i in 0:(number_of_leafs - 1)
         primitive_index::UInt32 = primitive_indecies[i + 1]
         primitive_aabb::AABB{N} = GetAABB(primitives[primitive_index + 1])
@@ -372,6 +386,9 @@ function BuildHierarchy(
     parent_information::Vector{UInt32},
     number_of_internal_nodes::UInt32
 ) where {N, MortonCodeT<:AbstractMortonCodeType}
+    @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_internal_nodes + 1)) "Error, invalid lbvh buffer provided"
+    @assert (length(sorted_morton_codes) == (number_of_internal_nodes + 1)) "Error, invalid sorted morton codes buffer provided"
+    @assert (length(parent_information) == (number_of_internal_nodes + number_of_internal_nodes + 1)) "Error, invalid parent information buffer provided"
     for internal_node_index in 0:(number_of_internal_nodes - 1)
         range_start, range_end = DetermineRange(sorted_morton_codes, Int32(internal_node_index))
         range_split = FindSplit(sorted_morton_codes, range_start, range_end)
@@ -379,7 +396,7 @@ function BuildHierarchy(
         left_child_index::UInt32 = range_split + ((range_split == range_start) ? number_of_internal_nodes : 0)
         right_child_index::UInt32 = range_split + 1 + (((range_split + 1) == range_end) ? number_of_internal_nodes : 0)
 
-        lbvh_nodes[internal_node_index + 1] = LBVHNode{N}(left_child_index, right_child_index, AABB2D(SVector(0.0f0, 0.0f0), SVector(0.0f0, 0.0f0)))
+        lbvh_nodes[internal_node_index + 1] = LBVHNode{N}(left_child_index, right_child_index, AABB{N}(MVector{N, Float32}(undef), MVector{N, Float32}(undef)))
 
         parent_information[left_child_index + 1] = internal_node_index
         parent_information[right_child_index + 1] = internal_node_index
@@ -413,6 +430,11 @@ function CalculateBoundingBoxesBottomUp(
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
 ) where {N}
+    @assert (number_of_leafs > 0) "Error, can't construct any empty lbvh"
+    @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
+    @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid lbvh buffer provided"
+    @assert (length(parent_information) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid parent information buffer provided"
+    @assert (length(visitation_information) == number_of_internal_nodes) "Error, invalid visitation info buffer provided"
     for i in 0:(number_of_leafs - 1)
         leaf_index::UInt32 = (number_of_internal_nodes + i)
 

@@ -54,7 +54,7 @@ number_of_internal_nodes::UInt32 = (number_of_leafs - 1)
 
 lbvh_nodes::Vector{LBVHNode2D} = Vector{LBVHNode2D}(undef, (number_of_internal_nodes + number_of_leafs))
 parent_information::Vector{UInt32} = Vector{UInt32}(undef, (number_of_internal_nodes + number_of_leafs))
-visitation_information::Vector{UInt32} = Vector{UInt32}(undef, (number_of_internal_nodes + number_of_leafs))
+visitation_information::Vector{UInt32} = Vector{UInt32}(undef, number_of_internal_nodes)
 
 for i in 0:(length(visitation_information) - 1)
     visitation_information[i + 1] = 0

@@ -10,6 +10,10 @@ function FindIntersections(
     number_of_internal_nodes::UInt32,
     number_of_leafs::UInt32
 ) where {N, PrimitiveT <: AbstractPrimitive}
+    @assert (number_of_leafs > 0) "Error, can't construct any empty lbvh"
+    @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
+    @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid lbvh buffer provided"
+    @assert (length(primitives) == number_of_leafs) "Error, invalid primitives buffer provided"
     for i in 0:(number_of_leafs - 1)
         leaf_index::UInt32 = (number_of_internal_nodes + i)
         leaf_node::LBVHNode{N} = lbvh_nodes[leaf_index + 1]

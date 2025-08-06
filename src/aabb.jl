@@ -3,14 +3,18 @@ using StaticArrays
 
 
 struct AABB{N}
-    min::SVector{N, Float32}
-    max::SVector{N, Float32}
+    min::MVector{N, Float32}
+    max::MVector{N, Float32}
 end
 
 const AABB2D = AABB{2}
 const AABB3D = AABB{3}
 
 
+
+function AABBValid(aabb::AABB{N})::Bool where {N}
+    return all(aabb.min .<= aabb.max)
+end
 
 """
 ```julia
@@ -35,6 +39,8 @@ julia> AABBUnion(AABB3D(SVector(-1.0f0, 1.0f0, 5.0f0), SVector(1.1f0, 1.1f0, 9.0
 ```
 """
 function AABBUnion(aabb_1::AABB{N}, aabb_2::AABB{N})::AABB{N} where {N}
+    @assert AABBValid(aabb_1) "Error, invalid first AABB provided"
+    @assert AABBValid(aabb_2) "Error, invalid second AABB provided"
     return AABB{N}(min.(aabb_1.min, aabb_2.min), max.(aabb_1.max, aabb_2.max))
 end
 
@@ -63,6 +69,8 @@ julia> AABB2AABBIntersection(AABB3D(SVector(0.1f0, 0.2f0, 0.3f0), SVector(0.4f0,
 ```
 """
 function AABB2AABBIntersection(aabb_1::AABB{N}, aabb_2::AABB{N})::Bool where {N}
+    @assert AABBValid(aabb_1) "Error, invalid first AABB provided"
+    @assert AABBValid(aabb_2) "Error, invalid second AABB provided"
     overlaps = (aabb_2.min .<= aabb_1.max) .& (aabb_1.min .<= aabb_2.max)
     return all(overlaps)
 end
