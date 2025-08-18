@@ -152,40 +152,29 @@ end
 
 """
 ```julia
-function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+function CalculateMortonCodesForPrimitiveAABBs(primitive_aabbs::Vector{AABB{N}}, ::Type{MortonCodeT})::Vector{MortonCodeT} where {N, MortonCodeT<:AbstractMortonCodeType}
 ```
 
 Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bounding AABB that encapsulates all of the AABBs then using this bounding AABB scales the vector of AABBs before computing their morton codes
 
 # Arguments
 - `primitive_aabbs`: a vector of AABBs of the primitives
+- `::Type{MortonCodeT}`: specifies if 32 bit or 64 bit morton codes should be used
 
 # Returns
-- `Vector{UInt32}`: the resulting vector of 32 bit morton codes
+- `Vector{UInt32}`: the resulting vector of either 32 or 64 bit morton codes (specified in the functions argument)
 """
-function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
+function CalculateMortonCodesForPrimitiveAABBs(primitive_aabbs::Vector{AABB{N}}, ::Type{MortonCodeT})::Vector{MortonCodeT} where {N, MortonCodeT<:AbstractMortonCodeType}
     @assert all(AABBValid.(primitive_aabbs)) "Error, invalid AABBs provided"
+    @assert ((N == 2) || ( N == 3)) "Error, only dimensions 2 and 3 are supported"
     container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
-    return MortonCodeScaledCenter32.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
-end
-
-"""
-```julia
-function CalculateMortonCodesForPrimitiveAABBs32(primitive_aabbs::Vector{AABB{N}})::Vector{UInt32} where {N}
-```
-
-Takes a vector of AABBs (Axis Aligned Bounding Boxes) and first computes a bounding AABB that encapsulates all of the AABBs then using this bounding AABB scales the vector of AABBs before computing their morton codes
-
-# Arguments
-- `primitive_aabbs`: a vector of AABBs of the primitives
-
-# Returns
-- `Vector{UInt32}`: the resulting vector of 64 bit morton codes
-"""
-function CalculateMortonCodesForPrimitiveAABBs64(primitive_aabbs::Vector{AABB{N}})::Vector{UInt64} where {N}
-    @assert all(AABBValid.(primitive_aabbs)) "Error, invalid AABBs provided"
-    container_aabb::AABB{N} = GetContainerAABB(primitive_aabbs)
-    return MortonCodeScaledCenter64.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
+    if (MortonCodeT === UInt32)
+        return MortonCodeScaledCenter32.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
+    elseif (MortonCodeT === UInt64)
+        return MortonCodeScaledCenter64.(GetScaledAABBCenter.(primitive_aabbs, Ref(container_aabb)))
+    else
+        @assert (false) "Error, unsupported morton code bit depth"
+    end
 end
 
 """
@@ -231,6 +220,7 @@ A helper function which tries to find the most significant bit position at which
 - this function might be undetermenistic (will result in hugely different tree if there are tiny differences in the sorted morton codes buffer) if different non stable sorts of the morton codes are used
 """
 function Delta(sorted_morton_codes::Vector{MortonCodeT}, i::Int32, code_i::MortonCodeT, j::Int32)::Int32 where {MortonCodeT<:AbstractMortonCodeType}
+    @assert (issorted(sorted_morton_codes)) "Error, invalid sorted morton codes buffer provided"
     if ((j < 0) || (j > (length(sorted_morton_codes) - 1)))
         return -1
     end
@@ -259,6 +249,7 @@ Calculates the range of primitives in the subtree of each internal node using on
 - `Tuple{Int32, Int32}`: a range given by a start and end index corresponding to the primitives in the current nodes subtree 
 """
 function DetermineRange(sorted_morton_codes::Vector{MortonCodeT}, idx::Int32)::Tuple{Int32, Int32} where {MortonCodeT<:AbstractMortonCodeType}
+    @assert (issorted(sorted_morton_codes)) "Error, invalid sorted morton codes buffer provided"
     code::MortonCodeT = sorted_morton_codes[idx + 1]
     deltaL::Int32 = Delta(sorted_morton_codes, idx, code, Int32(idx - 1))
     deltaR::Int32 = Delta(sorted_morton_codes, idx, code, Int32(idx + 1))
@@ -301,6 +292,7 @@ Calculates an index inside a range using morton codes such that it makes the res
 - `Int32`: an index between `first` and `last` that splits the morton codes somewhat evenly
 """
 function FindSplit(sorted_morton_codes::Vector{MortonCodeT}, first::Int32, last::Int32)::Int32 where {MortonCodeT<:AbstractMortonCodeType}
+    @assert (issorted(sorted_morton_codes)) "Error, invalid sorted morton codes buffer provided"
     firstCode::MortonCodeT = sorted_morton_codes[first + 1]
     
     commonPrefix::Int32 = Delta(sorted_morton_codes, first, firstCode, last)
@@ -327,10 +319,10 @@ end
 function InitLeafs(
     lbvh_nodes::Vector{LBVHNode{N}},
     primitive_indecies::Vector{UInt32},
-    primitives::Vector{PrimitiveT},
+    primitive_aabbs::Vector{AABB{N}},
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
-) where {N, PrimitiveT<:AbstractPrimitive}
+) where {N}
 ```
 
 Initializes the leaf nodes with their primitive indexes and their AABBs (Axis Aligned Bounding Box)
@@ -338,25 +330,25 @@ Initializes the leaf nodes with their primitive indexes and their AABBs (Axis Al
 # Arguments
 - `lbvh_nodes`: the buffer (vector) containing the LBVH nodes (both the internal and leaf nodes)
 - `primitive_indecies`: a vector containing the primitive indecies associated with the sorted morton codes
-- `primitives`: a vector of the primitives
+- `primitive_aabbs`: a vector of the primitive abbss
 - `number_of_internal_nodes`: the number of internal nodes inside `lbvh_nodes`
 - `number_of_leafs`: the number of leaf nodes inside `lbvh_nodes`
 """
 function InitLeafs(
     lbvh_nodes::Vector{LBVHNode{N}},
     primitive_indecies::Vector{UInt32},
-    primitives::Vector{PrimitiveT},
+    primitive_aabbs::Vector{AABB{N}},
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
-) where {N, PrimitiveT<:AbstractPrimitive}
+) where {N}
     @assert (number_of_leafs > 0) "Error, can't construct any empty lbvh"
     @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
     @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid lbvh buffer provided"
     @assert (length(primitive_indecies) == number_of_leafs) "Error, invalid primitive indecies buffer provided"
-    @assert (length(primitives) == number_of_leafs) "Error, invalid primitives buffer provided"
+    @assert (length(primitive_aabbs) == number_of_leafs) "Error, invalid primitive aabbs buffer provided"
     for i in 0:(number_of_leafs - 1)
         primitive_index::UInt32 = primitive_indecies[i + 1]
-        primitive_aabb::AABB{N} = GetAABB(primitives[primitive_index + 1])
+        primitive_aabb::AABB{N} = primitive_aabbs[primitive_index + 1]
         leaf_index::UInt32 = (number_of_internal_nodes + i)
         lbvh_nodes[leaf_index + 1] = LBVHNode{N}(INVALID_CHILD_POINTER, primitive_index, primitive_aabb)
     end
@@ -387,7 +379,7 @@ function BuildHierarchy(
     number_of_internal_nodes::UInt32
 ) where {N, MortonCodeT<:AbstractMortonCodeType}
     @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_internal_nodes + 1)) "Error, invalid lbvh buffer provided"
-    @assert (length(sorted_morton_codes) == (number_of_internal_nodes + 1)) "Error, invalid sorted morton codes buffer provided"
+    @assert ((length(sorted_morton_codes) == (number_of_internal_nodes + 1)) && issorted(sorted_morton_codes)) "Error, invalid sorted morton codes buffer provided"
     @assert (length(parent_information) == (number_of_internal_nodes + number_of_internal_nodes + 1)) "Error, invalid parent information buffer provided"
     for internal_node_index in 0:(number_of_internal_nodes - 1)
         range_start, range_end = DetermineRange(sorted_morton_codes, Int32(internal_node_index))
@@ -430,7 +422,7 @@ function CalculateBoundingBoxesBottomUp(
     number_of_internal_nodes::UInt32, 
     number_of_leafs::UInt32
 ) where {N}
-    @assert (number_of_leafs > 0) "Error, can't construct any empty lbvh"
+    @assert (number_of_leafs > 0) "Error, empty lbvh is not allowed"
     @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
     @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid lbvh buffer provided"
     @assert (length(parent_information) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid parent information buffer provided"
@@ -460,4 +452,64 @@ function CalculateBoundingBoxesBottomUp(
             current_node_index = parent_information[current_node_index + 1]
         end
     end
+end
+
+"""
+```julia
+function BuildLBVH(primitive_aabbs::Vector{AABB{N}}, ::Type{MortonCodeT})::Tuple{Vector{LBVHNode{N}}, UInt32, UInt32} where {N, MortonCodeT<:AbstractMortonCodeType}
+```
+
+Takes a vector of AABBs (Axis Aligned Bounding Boxes) and builds a LBVH from them
+
+# Arguments
+- `primitive_aabbs`: the vector containing the AABBs of the primitives from which the LBVH will be built, must have either 2D or 3D AABBs and have at least 1 item
+- `::Type{MortonCodeT}`: specifies if 32 bit or 64 bit morton codes should be used
+
+# Returns
+- `Tuple{Vector{LBVHNode{N}}, UInt32, UInt32}`: the buffer (vector) containing the LBVH nodes (both the internal and leaf nodes) and the counts of the internal and leaf nodes in it
+"""
+function BuildLBVH(primitive_aabbs::Vector{AABB{N}}, ::Type{MortonCodeT})::Tuple{Vector{LBVHNode{N}}, UInt32, UInt32} where {N, MortonCodeT<:AbstractMortonCodeType}
+    @assert (length(primitive_aabbs) > 0) "Error, can't construct empty lbvh"
+    @assert ((N == 2) || ( N == 3)) "Error, only dimensions 2 and 3 are supported"
+
+    sorted_morton_codes_with_primitive_indecies::Vector{PrimitiveIndexWithMortonCode{MortonCodeT}} = GetSortedMortonCodesWithIndecies(CalculateMortonCodesForPrimitiveAABBs(primitive_aabbs, MortonCodeT))
+
+    number_of_leafs::UInt32 = UInt32(length(sorted_morton_codes_with_primitive_indecies))
+    number_of_internal_nodes::UInt32 = (number_of_leafs - 1)
+
+    lbvh_nodes::Vector{LBVHNode{N}} = Vector{LBVHNode{N}}(undef, (number_of_internal_nodes + number_of_leafs))
+    parent_information::Vector{UInt32} = Vector{UInt32}(undef, (number_of_internal_nodes + number_of_leafs))
+    visitation_information::Vector{UInt32} = Vector{UInt32}(undef, number_of_internal_nodes)
+
+    for i in 0:(length(visitation_information) - 1)
+        visitation_information[i + 1] = 0
+    end
+
+    primitive_indecies::Vector{UInt32} = getfield.(sorted_morton_codes_with_primitive_indecies, :primitive_index)
+    sorted_morton_codes::Vector{MortonCodeT} = getfield.(sorted_morton_codes_with_primitive_indecies, :morton_code)
+
+    InitLeafs(
+        lbvh_nodes, 
+        primitive_indecies, 
+        primitive_aabbs, 
+        number_of_internal_nodes, 
+        number_of_leafs
+    )
+
+    BuildHierarchy(
+        lbvh_nodes, 
+        sorted_morton_codes, 
+        parent_information, 
+        number_of_internal_nodes
+    )
+
+    CalculateBoundingBoxesBottomUp(
+        lbvh_nodes, 
+        parent_information, 
+        visitation_information, 
+        number_of_internal_nodes, 
+        number_of_leafs
+    )
+
+    return lbvh_nodes, number_of_leafs, number_of_internal_nodes
 end
