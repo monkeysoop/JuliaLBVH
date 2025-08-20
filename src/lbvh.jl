@@ -20,6 +20,8 @@ struct PrimitiveIndexWithMortonCode{MortonCodeT<:AbstractMortonCodeType}
     morton_code::MortonCodeT
 end
 
+const STACK_SIZE = 100
+
 
 
 """
@@ -512,4 +514,68 @@ function BuildLBVH(primitive_aabbs::Vector{AABB{N}}, ::Type{MortonCodeT})::Tuple
     )
 
     return lbvh_nodes, number_of_leafs, number_of_internal_nodes
+end
+
+
+
+function LBVHToPrimitiveIntersection(
+    lbvh_nodes::Vector{LBVHNode{N}},
+    lbvh_primitives::Vector{LBVHPrimitiveT},
+    number_of_internal_nodes::UInt32,
+    number_of_leafs::UInt32,
+    primitive::PrimitiveT,
+    primitive_aabb::AABB{N},
+    primitive_lbvh_primitive_intersection::Function,
+    intersection_callback::Function
+) where {N, LBVHPrimitiveT<:AbstractPrimitive, PrimitiveT<:AbstractPrimitive}
+    @assert (number_of_leafs > 0) "Error, empty lbvh provided"
+    @assert ((number_of_internal_nodes + 1) == number_of_leafs) "Error, number of internal nodes is incorrect"
+    @assert (length(lbvh_nodes) == (number_of_internal_nodes + number_of_leafs)) "Error, invalid sized lbvh buffer provided"
+    @assert (length(lbvh_primitives) == number_of_leafs) "Error, invalid primitives buffer provided"
+    @assert AABBValid(primitive_aabb) "Error, invalid primitive AABB provided"
+
+    stack::MVector{STACK_SIZE, UInt32} = MVector{STACK_SIZE, UInt32}(undef)
+    stack_size::Int32 = 0
+
+    current_node_index::UInt32 = 0
+    current_node::LBVHNode{N} = lbvh_nodes[current_node_index + 1]
+
+    while (true)
+        is_node_internal::Bool = (current_node.left_child_index != INVALID_CHILD_POINTER)
+
+        intersect_left_child::Bool = (is_node_internal && AABB2AABBIntersection(primitive_aabb, lbvh_nodes[current_node.left_child_index + 1].aabb))
+        intersect_right_child::Bool = (is_node_internal && AABB2AABBIntersection(primitive_aabb, lbvh_nodes[current_node.right_child_index_or_primitive_index + 1].aabb))
+
+        if (intersect_left_child)
+            if (intersect_right_child)
+                if (stack_size < length(stack))
+                    stack[stack_size + 1] = current_node.right_child_index_or_primitive_index
+                    stack_size += 1
+                else
+                    println("Warning, dropped node because stack is too small")
+                end
+            end
+            current_node_index = current_node.left_child_index
+            current_node = lbvh_nodes[current_node.left_child_index + 1]
+        elseif (intersect_right_child)
+            current_node_index = current_node.right_child_index_or_primitive_index
+            current_node = lbvh_nodes[current_node.right_child_index_or_primitive_index + 1]
+        else
+            if (!is_node_internal)
+                is_intersecting, intersection_infos... = primitive_lbvh_primitive_intersection(primitive, lbvh_primitives[current_node.right_child_index_or_primitive_index + 1])
+                if (is_intersecting)
+                    intersection_callback(intersection_infos...)
+                end
+            end
+
+            if (stack_size == 0)
+                break
+            end
+
+            current_node_index = stack[(stack_size - 1) + 1]
+            stack_size -= 1
+
+            current_node = lbvh_nodes[current_node_index + 1]
+        end
+    end
 end
